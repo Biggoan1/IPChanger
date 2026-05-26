@@ -54,8 +54,8 @@ Invoke-ps2exe `
     -title       'Network Configuration Tool' `
     -product     'IPChanger' `
     -description 'Network Configuration Tool' `
-    -company     'Consumers Energy' `
-    -copyright   "(c) $(Get-Date -Format yyyy) Consumers Energy" `
+    -company     'Biggoan1' `
+    -copyright   "(c) $(Get-Date -Format yyyy) Biggoan1" `
     -version     $Version
     # Add -requireAdmin above to embed a UAC manifest (shield icon + prompt before
     # launch). The script also self-elevates, so this is optional.
