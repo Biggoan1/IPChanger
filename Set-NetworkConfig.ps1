@@ -313,7 +313,7 @@ function New-IPOctetGroup {
 
 # Check group membership before showing GUI
 if (-not (Test-GroupMembership -GroupName "Network Configuration Operators")) {
-    [System.Windows.Forms.MessageBox]::Show(
+    [void][System.Windows.Forms.MessageBox]::Show(
         "You are not a member of the 'Network Configuration Operators' group.`n`nAccess denied.",
         "Authorization Required",
         [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -505,7 +505,7 @@ $buttonDHCP.Add_Click({
                 # Wait for adapter to restart and DHCP to obtain address
                 Start-Sleep -Seconds 3
 
-                [System.Windows.Forms.MessageBox]::Show(
+                [void][System.Windows.Forms.MessageBox]::Show(
                     "DHCP enabled successfully!",
                     "Success",
                     [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -517,7 +517,7 @@ $buttonDHCP.Add_Click({
         }
     }
     catch {
-        [System.Windows.Forms.MessageBox]::Show(
+        [void][System.Windows.Forms.MessageBox]::Show(
             "Error: $($_.Exception.Message)",
             "Error",
             [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -568,7 +568,7 @@ $buttonApply.Add_Click({
     # DNS is optional - no validation needed
 
     if ($errors.Count -gt 0) {
-        [System.Windows.Forms.MessageBox]::Show(
+        [void][System.Windows.Forms.MessageBox]::Show(
             ($errors -join "`n"),
             "Validation Error",
             [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -603,7 +603,7 @@ $buttonApply.Add_Click({
                 -SecondaryDNS $dns2
 
             if ($success) {
-                [System.Windows.Forms.MessageBox]::Show(
+                [void][System.Windows.Forms.MessageBox]::Show(
                     "Network configuration applied successfully!",
                     "Success",
                     [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -615,7 +615,7 @@ $buttonApply.Add_Click({
         }
     }
     catch {
-        [System.Windows.Forms.MessageBox]::Show(
+        [void][System.Windows.Forms.MessageBox]::Show(
             "Error: $($_.Exception.Message)",
             "Error",
             [System.Windows.Forms.MessageBoxButtons]::OK,
