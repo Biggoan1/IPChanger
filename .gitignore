@@ -1,0 +1,12 @@
+# Build artifacts (compiled by build.ps1 / ps2exe)
+*.exe
+
+# Logs / transcripts
+*.log
+logs/
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+.vs/
+*.user
