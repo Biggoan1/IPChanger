@@ -70,3 +70,7 @@ two `# TODO` markers:
 
 - `build.ps1` → `-OutputExe`
 - `SetNet-Install.ps1` → `$ExeName`
+
+## License
+
+[MIT](LICENSE) © 2026 Biggoan1
