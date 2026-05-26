@@ -47,11 +47,11 @@ See **[STATUS.md](STATUS.md)** for current state and next steps (a handoff brief
 .\build.ps1 -Sign -CertThumbprint <THUMBPRINT> -Version 4.0.1.0
 ```
 
-Output: `Set-NetworkConfig.exe` next to the script.
+Output: `IPChanger.exe` next to the script (compiled from `Set-NetworkConfig.ps1`).
 
 ## Install / uninstall
 
-Ship `Set-NetworkConfig.exe` and `SetNet-Install.ps1` together, then run:
+Ship `IPChanger.exe` and `SetNet-Install.ps1` together, then run:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\SetNet-Install.ps1 -Action Install
@@ -61,15 +61,6 @@ powershell.exe -ExecutionPolicy Bypass -File .\SetNet-Install.ps1 -Action Uninst
 - Installs to: `C:\Program Files\IPChanger`
 - Shortcuts: Public Desktop and All-Users Start Menu, named **Network Configuration Tool**
 - Logs: `C:\ProgramData\IPChanger\Logs`
-
-## Renaming the exe to `IPChanger.exe`
-
-The exe is currently named `Set-NetworkConfig.exe` so functionality can be verified
-against the prior versions. To switch the final name to `IPChanger.exe`, update the
-two `# TODO` markers:
-
-- `build.ps1` → `-OutputExe`
-- `SetNet-Install.ps1` → `$ExeName`
 
 ## License
 

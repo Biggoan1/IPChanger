@@ -29,7 +29,7 @@ param(
     [string]$Source,
     [string]$OutputExe,
     [string]$Installer,
-    [string]$Version       = '4.0.0.0',
+    [string]$Version       = '4.0.1.0',
     [switch]$Sign,
     [string]$CertThumbprint,
     [string]$TimestampUrl  = 'http://timestamp.digicert.com'
@@ -40,8 +40,7 @@ $ErrorActionPreference = 'Stop'
 # Resolve this script's directory (don't rely on $PSScriptRoot inside param defaults).
 $root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $Source)    { $Source    = Join-Path $root 'Set-NetworkConfig.ps1' }
-# TODO: change to 'IPChanger.exe' after testing (keep in sync with $ExeName in SetNet-Install.ps1).
-if (-not $OutputExe) { $OutputExe = Join-Path $root 'Set-NetworkConfig.exe' }
+if (-not $OutputExe) { $OutputExe = Join-Path $root 'IPChanger.exe' }
 if (-not $Installer) { $Installer = Join-Path $root 'SetNet-Install.ps1' }
 
 # ---- Ensure ps2exe is available -------------------------------------------

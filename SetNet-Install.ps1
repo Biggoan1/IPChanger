@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Stop'
 
 # ---- Settings (single source of truth) ------------------------------------
 $AppName      = 'IPChanger'
-$ExeName      = 'Set-NetworkConfig.exe'                       # TODO: rename to 'IPChanger.exe' after testing
+$ExeName      = 'IPChanger.exe'
 $ShortcutName = 'Network Configuration Tool.lnk'
 $InstallDir   = Join-Path $env:ProgramFiles $AppName          # C:\Program Files\IPChanger
 $IconLocation = "$env:SystemRoot\System32\Shell32.dll,17"

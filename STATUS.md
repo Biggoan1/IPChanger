@@ -14,18 +14,17 @@ For what the app is and how to build/install it, see [README.md](README.md).
 - **Installer** (`SetNet-Install.ps1`) targets **`C:\Program Files\IPChanger`** with
   public Desktop + All-Users Start Menu shortcuts; logs to `C:\ProgramData\IPChanger\Logs`.
 - **Scaffolding:** `build.ps1` (ps2exe + Authenticode signing), `README.md`,
-  `.gitignore`, `resumeVibing.ps1` (post-reboot orientation + session resume).
+  `.gitignore`, `resumeVibing.ps1` (post-reboot orientation + session resume), `LICENSE` (MIT).
+- **Built & named:** ps2exe compiles `Set-NetworkConfig.ps1` → **`IPChanger.exe`** (v4.0.1.0,
+  unsigned). Exe metadata is `Biggoan1` (no employer branding).
+- **Pushed** to GitHub (`origin/main`).
 
 ## Pending / next steps
 
-1. **TEST** the merged app: run `.\Set-NetworkConfig.ps1` (self-elevates via UAC).
-   Confirm the adapter list, then try DHCP toggle + Apply on a test adapter.
-2. **BUILD** the exe: `.\build.ps1` ( add `-Sign` to sign with the code-signing cert ).
-3. **TEST the installer:** `.\SetNet-Install.ps1 -Action Install` (and `-Action Uninstall`).
-4. **RENAME** the exe `Set-NetworkConfig.exe` → `IPChanger.exe` once verified: flip the two
-   `# TODO` markers in `build.ps1` (`-OutputExe`) and `SetNet-Install.ps1` (`$ExeName`).
-5. **PUSH** when it all works: `git push -u origin main`.
-   If the GitHub repo already has commits: `git pull --allow-unrelated-histories origin main` first.
+1. **TEST the installer:** `.\SetNet-Install.ps1 -Action Install` → confirm it lands in
+   `C:\Program Files\IPChanger` with Desktop + Start Menu shortcuts; then `-Action Uninstall`.
+2. **SIGN at the prod move:** `.\build.ps1 -Sign` (or sign the moved exe) with the
+   code-signing cert. The exe is currently **unsigned**.
 
 ## Open considerations (not yet decided)
 
@@ -39,5 +38,5 @@ For what the app is and how to build/install it, see [README.md](README.md).
 ## Git / repo state
 
 - Branch `main`; remote `origin` = https://github.com/Biggoan1/IPChanger.git
-- Committed locally; **not pushed yet** (waiting on the test pass above).
+- Pushed and in sync with `origin/main`.
 - The compiled `.exe` is a build artifact and is **not** committed (see `.gitignore`).
