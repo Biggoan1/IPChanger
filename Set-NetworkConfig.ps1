@@ -287,8 +287,11 @@ function New-IPOctetGroup {
 
         $textBox.Add_TextChanged({
             param($sender, $e)
-            # Auto-advance to next box when 3 digits entered
-            if ($sender.Text.Length -eq 3) {
+            # Auto-advance to the next box when 3 digits are entered - but only when the
+            # user is actually typing in THIS box. Without the Focused check, programmatic
+            # fills (CIDR -> subnet mask, or reading an adapter's config) would trip the
+            # advance and steal focus (e.g. the CIDR field tabbing away after one digit).
+            if ($sender.Focused -and $sender.Text.Length -eq 3) {
                 $form.SelectNextControl($sender, $true, $true, $true, $true)
             }
         })
