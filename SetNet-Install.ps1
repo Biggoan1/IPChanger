@@ -28,10 +28,10 @@ $AppName      = 'IPChanger'
 $ExeName      = 'IPChanger.exe'
 $ShortcutName = 'Network Configuration Tool.lnk'
 $InstallDir   = Join-Path $env:ProgramFiles $AppName          # C:\Program Files\IPChanger
-$IconLocation = "$env:SystemRoot\System32\Shell32.dll,17"
 
 # Shortcut targets
 $TargetExe         = Join-Path $InstallDir $ExeName
+$IconLocation      = "$TargetExe,0"                           # use the exe's own embedded icon
 $DesktopShortcut   = Join-Path $env:PUBLIC "Desktop\$ShortcutName"
 $StartMenuDir      = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
 $StartMenuShortcut = Join-Path $StartMenuDir $ShortcutName

@@ -29,6 +29,7 @@ param(
     [string]$Source,
     [string]$OutputExe,
     [string]$Installer,
+    [string]$IconFile,
     [string]$Version       = '4.0.1.0',
     [switch]$Sign,
     [string]$CertThumbprint,
@@ -42,6 +43,7 @@ $root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvoca
 if (-not $Source)    { $Source    = Join-Path $root 'Set-NetworkConfig.ps1' }
 if (-not $OutputExe) { $OutputExe = Join-Path $root 'IPChanger.exe' }
 if (-not $Installer) { $Installer = Join-Path $root 'SetNet-Install.ps1' }
+if (-not $IconFile)  { $IconFile  = Join-Path $root 'IPChanger.ico' }
 
 # ---- Ensure ps2exe is available -------------------------------------------
 if (-not (Get-Module -ListAvailable -Name ps2exe)) {
@@ -52,18 +54,22 @@ Import-Module ps2exe
 
 # ---- Compile ---------------------------------------------------------------
 Write-Host "Compiling`n  $Source`n-> $OutputExe"
-Invoke-ps2exe `
-    -InputFile   $Source `
-    -OutputFile  $OutputExe `
-    -noConsole `
-    -title       'Network Configuration Tool' `
-    -product     'IPChanger' `
-    -description 'Network Configuration Tool' `
-    -company     'Biggoan1' `
-    -copyright   "(c) $(Get-Date -Format yyyy) Biggoan1" `
-    -version     $Version
-    # Add -requireAdmin above to embed a UAC manifest (shield icon + prompt before
+$ps2exeArgs = @{
+    InputFile   = $Source
+    OutputFile  = $OutputExe
+    noConsole   = $true
+    title       = 'Network Configuration Tool'
+    product     = 'IPChanger'
+    description = 'Network Configuration Tool'
+    company     = 'Biggoan1'
+    copyright   = "(c) $(Get-Date -Format yyyy) Biggoan1"
+    version     = $Version
+    # Add  requireAdmin = $true  to embed a UAC manifest (shield icon + prompt before
     # launch). The script also self-elevates, so this is optional.
+}
+if (Test-Path $IconFile) { $ps2exeArgs['iconFile'] = $IconFile; Write-Host "Using icon: $IconFile" }
+else { Write-Warning "Icon not found ($IconFile) - building without a custom icon." }
+Invoke-ps2exe @ps2exeArgs
 
 if (-not (Test-Path $OutputExe)) { throw "Build failed: $OutputExe was not produced." }
 Write-Host "Built $OutputExe"

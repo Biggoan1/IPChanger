@@ -28,7 +28,9 @@ physical network adapter, or switch the adapter back to DHCP.
 |------|---------|
 | `Set-NetworkConfig.ps1` | The app: self-elevation + the WinForms GUI and all network logic. |
 | `SetNet-Install.ps1` | Install/uninstall script. Copies the exe to `C:\Program Files\IPChanger` and creates Desktop + Start Menu shortcuts. |
-| `build.ps1` | Compiles `Set-NetworkConfig.ps1` to an exe with ps2exe and (optionally) signs the exe + installer. |
+| `build.ps1` | Compiles `Set-NetworkConfig.ps1` to an exe with ps2exe, embeds the icon, and (optionally) signs the exe + installer. |
+| `Make-Icon.ps1` | Generates `IPChanger.ico` (re-run to tweak the icon design). |
+| `IPChanger.ico` | App icon embedded into the exe; the installer's shortcuts inherit it. |
 
 See **[STATUS.md](STATUS.md)** for current state and next steps (a handoff briefing).
 
@@ -59,7 +61,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\SetNet-Install.ps1 -Action Uninst
 ```
 
 - Installs to: `C:\Program Files\IPChanger`
-- Shortcuts: Public Desktop and All-Users Start Menu, named **Network Configuration Tool**
+- Shortcuts: Public Desktop and All-Users Start Menu, named **Network Configuration Tool** (using the exe's embedded icon)
 - Logs: `C:\ProgramData\IPChanger\Logs`
 
 ## License
