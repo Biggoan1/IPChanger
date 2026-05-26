@@ -5,8 +5,7 @@
 *.log
 logs/
 
-# Per-machine resume state + scratch (not part of the app)
-.resume-session
+# Scratch (not part of the app)
 resume.txt
 
 # OS / editor cruft

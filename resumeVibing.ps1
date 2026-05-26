@@ -8,7 +8,7 @@
         -JustDoIt    Resume Claude with --dangerously-skip-permissions (no approval prompts).
         -NoLaunch    Just print the orientation; don't launch Claude.
         -SessionId   Claude session to resume. If omitted, falls back to
-                     $env:CLAUDE_RESUME_SESSION, then a local (untracked) .resume-session file.
+                     $env:CLAUDE_RESUME_SESSION, then the .resume-session file.
 #>
 [CmdletBinding()]
 param(
