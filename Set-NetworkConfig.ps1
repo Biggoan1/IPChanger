@@ -221,6 +221,12 @@ function Set-NetworkConfiguration {
         $netAdapter | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
         $netAdapter | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
+        # Turn DHCP off on this interface BEFORE assigning the static address. New-NetIPAddress
+        # writes a persistent static IP, which Windows rejects while DHCP is still enabled:
+        # "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled" - and this
+        # happens whether or not the adapter currently holds a DHCP lease.
+        Set-NetIPInterface -InterfaceIndex $netAdapter.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction SilentlyContinue
+
         # Set new IP address and subnet mask
         $netAdapter | New-NetIPAddress -IPAddress $IPAddress -PrefixLength (ConvertTo-PrefixLength $SubnetMask) -DefaultGateway $Gateway -ErrorAction Stop
 
