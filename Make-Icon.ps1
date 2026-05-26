@@ -18,6 +18,19 @@ Add-Type -AssemblyName System.Drawing
 $root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $OutFile) { $OutFile = Join-Path $root 'IPChanger.ico' }
 
+function New-RoundRectPath {
+    param([single]$X, [single]$Y, [single]$W, [single]$H, [single]$R)
+    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+    if ($R -le 0) { $p.AddRectangle((New-Object System.Drawing.RectangleF($X, $Y, $W, $H))); return $p }
+    $d = [single]($R * 2)
+    $p.AddArc($X,           $Y,           $d, $d, 180, 90)
+    $p.AddArc($X + $W - $d, $Y,           $d, $d, 270, 90)
+    $p.AddArc($X + $W - $d, $Y + $H - $d, $d, $d,   0, 90)
+    $p.AddArc($X,           $Y + $H - $d, $d, $d,  90, 90)
+    $p.CloseFigure()
+    return $p
+}
+
 function New-IconBitmap {
     param([int]$Size)
 
@@ -45,29 +58,53 @@ function New-IconBitmap {
     $grad  = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $c1, $c2, 90.0)
     $g.FillPath($grad, $path)
 
-    # Hub-and-spoke network motif
-    $cx = $s * 0.5; $cy = $s * 0.53; $R = $s * 0.24
-    $white  = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-    $accent = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 150, 220, 255))
-    $pen    = New-Object System.Drawing.Pen([System.Drawing.Color]::White, [single]($s * 0.028))
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
+    # --- Gear + plug motif ---
+    $cx = $s * 0.5; $cy = $s * 0.5
+    $white = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
 
-    $pts = foreach ($a in 270, 30, 150) {
-        $rad = $a * [Math]::PI / 180
-        New-Object System.Drawing.PointF([single]($cx + $R * [Math]::Cos($rad)), [single]($cy + $R * [Math]::Sin($rad)))
+    # Gear cog: flat-topped trapezoidal teeth (4 vertices per tooth, then a valley gap)
+    $teeth = 8
+    $rTip  = $s * 0.36
+    $rBody = $s * 0.285
+    $step  = (2 * [Math]::PI) / $teeth
+    $fracs = 0.00, 0.12, 0.38, 0.50
+    $radii = $rBody, $rTip, $rTip, $rBody
+    $cog   = New-Object System.Collections.Generic.List[System.Drawing.PointF]
+    for ($i = 0; $i -lt $teeth; $i++) {
+        for ($j = 0; $j -lt 4; $j++) {
+            $ang = ($i + $fracs[$j]) * $step
+            $rr  = [double]$radii[$j]
+            $cog.Add((New-Object System.Drawing.PointF([single]($cx + $rr*[Math]::Cos($ang)), [single]($cy + $rr*[Math]::Sin($ang)))))
+        }
     }
-    $center = New-Object System.Drawing.PointF([single]$cx, [single]$cy)
+    $gearPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $gearPath.AddPolygon($cog.ToArray())
+    $g.FillPath($white, $gearPath)
 
-    foreach ($p in $pts) { $g.DrawLine($pen, $center, $p) }
+    # Punch the gear's center hole by re-painting the tile gradient over it
+    $rHole = $s * 0.20
+    $g.FillEllipse($grad, [single]($cx - $rHole), [single]($cy - $rHole), [single]($rHole*2), [single]($rHole*2))
 
-    $rN = $s * 0.085; $rC = $s * 0.10
-    foreach ($p in $pts) {
-        $g.FillEllipse($accent, [single]($p.X - $rN), [single]($p.Y - $rN), [single]($rN*2), [single]($rN*2))
+    # Plug glyph (white) seated in the hole: two prongs, a body, a short cord
+    $bodyW = $s * 0.17; $bodyH = $s * 0.10
+    $bodyX = $cx - $bodyW/2; $bodyY = $cy - $s*0.03
+    $bodyPath = New-RoundRectPath -X $bodyX -Y $bodyY -W $bodyW -H $bodyH -R ($s*0.025)
+    $g.FillPath($white, $bodyPath)
+
+    $prongW = $s * 0.034; $prongH = $s * 0.10; $half = $s * 0.045
+    foreach ($sx in -1, 1) {
+        $px = $cx + $sx*$half - $prongW/2
+        $py = $bodyY - $prongH + $s*0.012
+        $prong = New-RoundRectPath -X $px -Y $py -W $prongW -H $prongH -R ($prongW/2)
+        $g.FillPath($white, $prong)
+        $prong.Dispose()
     }
-    $g.FillEllipse($white, [single]($cx - $rC), [single]($cy - $rC), [single]($rC*2), [single]($rC*2))
 
-    $g.Dispose(); $grad.Dispose(); $white.Dispose(); $accent.Dispose(); $pen.Dispose(); $path.Dispose()
+    $cordW = $s * 0.05
+    $cordPath = New-RoundRectPath -X ($cx - $cordW/2) -Y ($bodyY + $bodyH - $s*0.005) -W $cordW -H ($s*0.06) -R ($cordW/2)
+    $g.FillPath($white, $cordPath)
+
+    $g.Dispose(); $grad.Dispose(); $white.Dispose(); $gearPath.Dispose(); $bodyPath.Dispose(); $cordPath.Dispose(); $path.Dispose()
     return $bmp
 }
 
