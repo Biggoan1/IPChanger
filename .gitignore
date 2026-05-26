@@ -6,8 +6,9 @@
 logs/
 
 # Scratch (not part of the app)
+# (debug screenshots like sadandy.png; the app icon is .ico and IS committed)
 resume.txt
-*.png            # debug screenshots (e.g. sadandy.png); the app icon is .ico and is committed
+*.png
 
 # OS / editor cruft
 Thumbs.db
