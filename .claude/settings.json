@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "try { $d = [Console]::In.ReadToEnd() | ConvertFrom-Json; $dir = if ($d.cwd) { $d.cwd } elseif ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; if ($d.session_id) { Set-Content -LiteralPath (Join-Path $dir '.resume-session') -Value $d.session_id -NoNewline } } catch { }",
+            "statusMessage": "Updating .resume-session",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
