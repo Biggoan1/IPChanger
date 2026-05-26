@@ -30,6 +30,8 @@ physical network adapter, or switch the adapter back to DHCP.
 | `SetNet-Install.ps1` | Install/uninstall script. Copies the exe to `C:\Program Files\IPChanger` and creates Desktop + Start Menu shortcuts. |
 | `build.ps1` | Compiles `Set-NetworkConfig.ps1` to an exe with ps2exe and (optionally) signs the exe + installer. |
 
+See **[STATUS.md](STATUS.md)** for current state and next steps (a handoff briefing).
+
 > The compiled `.exe` is a build artifact and is **not** committed (see `.gitignore`).
 
 ## Build
