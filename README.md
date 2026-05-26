@@ -6,7 +6,7 @@ physical network adapter, or switch the adapter back to DHCP.
 
 ## What it does
 
-- Lists **all physical adapters** (connected or not), excluding Wi-Fi and WWAN/cellular.
+- Lists **all physical adapters** (connected or not), excluding Wi-Fi, WWAN/cellular, and Hyper-V/VMware vEthernet switches.
 - Validates IP address, subnet mask, and gateway input.
 - Reads the currently selected adapter's settings into the form.
 - Applies a static configuration, or enables DHCP.

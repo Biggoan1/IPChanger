@@ -10,7 +10,7 @@ For what the app is and how to build/install it, see [README.md](README.md).
 - **Merged the launcher into the app.** `Set-NetworkConfig.ps1` now self-elevates
   (relaunches via UAC when not already admin); the old `Launch-NetworkConfig.ps1` is gone.
 - **Adapter list changes:** shows **all physical adapters** (connected or not) and
-  excludes **Wi-Fi** and **WWAN/cellular**.
+  excludes **Wi-Fi**, **WWAN/cellular**, and **Hyper-V/VMware vEthernet** switches.
 - **Installer** (`SetNet-Install.ps1`) targets **`C:\Program Files\IPChanger`** with
   public Desktop + All-Users Start Menu shortcuts; logs to `C:\ProgramData\IPChanger\Logs`.
 - **Scaffolding:** `build.ps1` (ps2exe + Authenticode signing), `README.md`,

@@ -347,12 +347,14 @@ $comboAdapter.FlatStyle = "Flat"
 $comboAdapter.TabIndex = $tabIndex++
 
 # Populate network adapters.
-# Show ALL physical adapters (connected or not); exclude Wi-Fi and WWAN/cellular.
-# Get-NetAdapter -Physical already excludes virtual adapters (Hyper-V, VMware, vEthernet, etc.).
+# Show ALL physical adapters (connected or not); exclude Wi-Fi, WWAN/cellular, and
+# Hyper-V / VMware vEthernet switch adapters (explicit, on top of -Physical).
 Get-NetAdapter -Physical | Where-Object {
     $_.PhysicalMediaType -ne "Native 802.11" -and          # exclude Wi-Fi
     $_.PhysicalMediaType -ne "Wireless WAN" -and           # exclude WWAN / cellular
-    $_.InterfaceDescription -notmatch "Mobile Broadband|WWAN|Cellular"
+    $_.InterfaceDescription -notmatch "Mobile Broadband|WWAN|Cellular" -and
+    $_.InterfaceDescription -notmatch "vEthernet|Hyper-V|Virtual|VMware|VirtualBox|TAP-Windows" -and
+    $_.Name -notmatch "vEthernet|VMware"
 } | Sort-Object Name | ForEach-Object {
     $comboAdapter.Items.Add($_.Name) | Out-Null
 }
