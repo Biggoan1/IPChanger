@@ -217,15 +217,15 @@ function Set-NetworkConfiguration {
             throw "Network adapter '$AdapterName' not found"
         }
 
+        # Turn DHCP off on this interface FIRST. New-NetIPAddress writes a persistent static
+        # IP, which Windows rejects while DHCP is still enabled ("Inconsistent parameters
+        # PolicyStore PersistentStore and Dhcp Enabled") - lease or no lease. Let a real
+        # failure here surface rather than masking it and hitting the confusing error later.
+        Set-NetIPInterface -InterfaceIndex $netAdapter.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+
         # Remove existing IP configuration
         $netAdapter | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
         $netAdapter | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-        # Turn DHCP off on this interface BEFORE assigning the static address. New-NetIPAddress
-        # writes a persistent static IP, which Windows rejects while DHCP is still enabled:
-        # "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled" - and this
-        # happens whether or not the adapter currently holds a DHCP lease.
-        Set-NetIPInterface -InterfaceIndex $netAdapter.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction SilentlyContinue
 
         # Set new IP address and subnet mask
         $netAdapter | New-NetIPAddress -IPAddress $IPAddress -PrefixLength (ConvertTo-PrefixLength $SubnetMask) -DefaultGateway $Gateway -ErrorAction Stop
@@ -317,6 +317,38 @@ function New-IPOctetGroup {
     return $controls
 }
 
+# Auto-fill the default gateway from the entered IP + CIDR: gateway = network address + 1
+# (e.g. 10.100.1.25 /24 -> 10.100.1.1). Suppressed while an adapter's real config is being read.
+$script:suppressGatewayAutofill = $false
+function Update-GatewayFromNetwork {
+    if ($script:suppressGatewayAutofill) { return }
+    if (-not $ipOctets -or -not $gatewayOctets -or -not $textCidr) { return }
+
+    $ipParts = @()
+    foreach ($c in $ipOctets) { if ($c -is [System.Windows.Forms.TextBox]) { $ipParts += $c.Text } }
+    $ip = $ipParts -join '.'
+    if (-not (Test-IPAddress $ip)) { return }
+
+    $cidr = 0
+    if (-not [int]::TryParse($textCidr.Text, [ref]$cidr)) { return }
+    if ($cidr -lt 1 -or $cidr -gt 30) { return }   # only networks with a usable host range
+
+    $mask = ConvertTo-SubnetMask -PrefixLength $cidr
+    if (-not $mask) { return }
+
+    $ipB = $ip.Split('.') | ForEach-Object { [int]$_ }
+    $gw  = @(
+        ($ipB[0] -band $mask[0]),
+        ($ipB[1] -band $mask[1]),
+        ($ipB[2] -band $mask[2]),
+        (($ipB[3] -band $mask[3]) + 1)
+    )
+    $i = 0
+    foreach ($c in $gatewayOctets) {
+        if ($c -is [System.Windows.Forms.TextBox]) { $c.Text = $gw[$i++].ToString() }
+    }
+}
+
 # Check group membership before showing GUI
 if (-not (Test-GroupMembership -GroupName "Network Configuration Operators")) {
     [void][System.Windows.Forms.MessageBox]::Show(
@@ -384,6 +416,11 @@ $ipOctets = New-IPOctetGroup -X 145 -Y 68 -StartTabIndex $tabIndex
 $tabIndex += 4
 $ipOctets | ForEach-Object { $form.Controls.Add($_) }
 
+# When the IP changes, refresh the gateway guess (network + 1).
+$ipOctets | Where-Object { $_ -is [System.Windows.Forms.TextBox] } | ForEach-Object {
+    $_.Add_TextChanged({ Update-GatewayFromNetwork })
+}
+
 # CIDR Prefix (e.g., /24)
 $labelCidrSlash = New-Object System.Windows.Forms.Label
 $labelCidrSlash.Location = New-Object System.Drawing.Point(313, 70)
@@ -421,6 +458,8 @@ $textCidr.Add_TextChanged({
             }
         }
     }
+    # Keep the default gateway in step with the network
+    Update-GatewayFromNetwork
 })
 $form.Controls.Add($textCidr)
 
@@ -650,6 +689,9 @@ $form.Controls.Add($buttonCancel)
 # Function to populate form fields from adapter configuration
 function Update-FormFromAdapter {
     if ($comboAdapter.SelectedItem) {
+        # Don't let the IP/CIDR writes below trigger the gateway auto-fill - we want the
+        # adapter's REAL gateway, which is set explicitly further down.
+        $script:suppressGatewayAutofill = $true
         try {
             $adapter = Get-NetAdapter | Where-Object { $_.Name -eq $comboAdapter.SelectedItem }
             if ($adapter) {
@@ -709,6 +751,9 @@ function Update-FormFromAdapter {
         }
         catch {
             # Silently fail - form will keep current values
+        }
+        finally {
+            $script:suppressGatewayAutofill = $false
         }
     }
 }
