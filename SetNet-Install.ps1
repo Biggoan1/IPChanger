@@ -57,11 +57,47 @@ function New-AppShortcut {
     $sc.Save()
 }
 
+function Remove-LegacyArtifacts {
+    # Remove files/shortcuts left by older IPChanger versions so upgrades don't leave
+    # stale copies behind. Each item is removed only if it exists; C:\Distrib itself and
+    # its \logs folder are intentionally left alone.
+    #   1.0      -> C:\Distrib\Set-Network.exe + public desktop 'Set-Network.lnk'
+    #   3.0      -> C:\Distrib\Set-Network.exe, Launch-SetNetwork.exe + 'Launch-SetNetwork.lnk'
+    #   OT build -> C:\Distrib\Apps\NetCfg\ + 'Launch-NetworkConfig.lnk' + Start Menu 'Network Changer'
+    $legacyFiles = @(
+        (Join-Path $env:SystemDrive 'Distrib\Set-Network.exe'),          # 1.0, 3.0
+        (Join-Path $env:SystemDrive 'Distrib\Launch-SetNetwork.exe'),    # 3.0
+        (Join-Path $env:PUBLIC      'Desktop\Set-Network.lnk'),          # 1.0
+        (Join-Path $env:PUBLIC      'Desktop\Launch-SetNetwork.lnk'),    # 3.0
+        (Join-Path $env:PUBLIC      'Desktop\Launch-NetworkConfig.lnk')  # OT build
+    )
+    $legacyDirs = @(
+        (Join-Path $env:SystemDrive 'Distrib\Apps\NetCfg'),                                   # OT build
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Network Changer')  # OT build
+    )
+
+    foreach ($item in $legacyFiles) {
+        if (Test-Path -LiteralPath $item) {
+            Write-Host "Removing legacy item:   $item"
+            Remove-Item -LiteralPath $item -Force -ErrorAction SilentlyContinue
+        }
+    }
+    foreach ($item in $legacyDirs) {
+        if (Test-Path -LiteralPath $item) {
+            Write-Host "Removing legacy folder: $item"
+            Remove-Item -LiteralPath $item -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 try {
     switch ($Action) {
 
         'Install' {
             Write-Host "Action=Install  ->  $InstallDir"
+
+            # Clean up anything left by previous versions before installing the new one.
+            Remove-LegacyArtifacts
 
             New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
 
@@ -84,6 +120,9 @@ try {
 
         'Uninstall' {
             Write-Host 'Action=Uninstall'
+
+            # Also clear any leftovers from older versions.
+            Remove-LegacyArtifacts
 
             foreach ($lnk in @($DesktopShortcut, $StartMenuShortcut)) {
                 if (Test-Path $lnk) { Remove-Item -Path $lnk -Force -Verbose }

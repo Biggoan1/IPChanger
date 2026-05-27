@@ -65,6 +65,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\SetNet-Install.ps1 -Action Uninst
 - Installs to: `C:\Program Files\IPChanger`
 - Shortcuts: Public Desktop and All-Users Start Menu, named **Network Configuration Tool** (using the exe's embedded icon)
 - Logs: `C:\ProgramData\IPChanger\Logs`
+- On install/uninstall, removes leftovers from older versions (`C:\Distrib\*.exe`, the
+  `Apps\NetCfg` folder, and old Desktop / Start Menu shortcuts). `C:\Distrib` and its
+  `\logs` are left untouched.
 
 ## Versioning
 
