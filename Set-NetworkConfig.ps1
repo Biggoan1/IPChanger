@@ -217,26 +217,28 @@ function Set-NetworkConfiguration {
             throw "Network adapter '$AdapterName' not found"
         }
 
-        # Turn DHCP off on this interface FIRST. New-NetIPAddress writes a persistent static
-        # IP, which Windows rejects while DHCP is still enabled ("Inconsistent parameters
-        # PolicyStore PersistentStore and Dhcp Enabled") - lease or no lease. Let a real
-        # failure here surface rather than masking it and hitting the confusing error later.
-        Set-NetIPInterface -InterfaceIndex $netAdapter.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+        # Set the static address with netsh. "source=static" disables DHCP AND assigns the
+        # address atomically, so it sidesteps New-NetIPAddress's "Inconsistent parameters
+        # PolicyStore PersistentStore and Dhcp Enabled" failure (which fires when writing a
+        # persistent static IP on a DHCP-enabled interface, even right after disabling DHCP).
+        $nameArg = "name=$AdapterName"
+        if (Test-IPAddress $Gateway) {
+            $out = netsh interface ipv4 set address $nameArg source=static address=$IPAddress mask=$SubnetMask gateway=$Gateway 2>&1
+        }
+        else {
+            $out = netsh interface ipv4 set address $nameArg source=static address=$IPAddress mask=$SubnetMask 2>&1
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw ("Could not set IP address: " + (($out | Out-String).Trim()))
+        }
 
-        # Remove existing IP configuration
-        $netAdapter | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-        $netAdapter | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-        # Set new IP address and subnet mask
-        $netAdapter | New-NetIPAddress -IPAddress $IPAddress -PrefixLength (ConvertTo-PrefixLength $SubnetMask) -DefaultGateway $Gateway -ErrorAction Stop
-
-        # Set DNS servers
+        # DNS via the cmdlet - reliable, and the PolicyStore conflict only affected New-NetIPAddress.
         $dnsServers = @()
         if ($PrimaryDNS) { $dnsServers += $PrimaryDNS }
         if ($SecondaryDNS) { $dnsServers += $SecondaryDNS }
 
         if ($dnsServers.Count -gt 0) {
-            Set-DnsClientServerAddress -InterfaceIndex $netAdapter.InterfaceIndex -ServerAddresses $dnsServers
+            Set-DnsClientServerAddress -InterfaceIndex $netAdapter.InterfaceIndex -ServerAddresses $dnsServers -ErrorAction Stop
         }
 
         return $true
