@@ -31,6 +31,8 @@ physical network adapter, or switch the adapter back to DHCP.
 | `build.ps1` | Compiles `Set-NetworkConfig.ps1` to an exe with ps2exe, embeds the icon, and (optionally) signs the exe + installer. |
 | `Make-Icon.ps1` | Generates `IPChanger.ico` (re-run to tweak the icon design). |
 | `IPChanger.ico` | App icon embedded into the exe; the installer's shortcuts inherit it. |
+| `VERSION` | Single source of truth for the app version (auto-bumped by the git pre-commit hook). |
+| `hooks/pre-commit` | Git hook that increments `VERSION` on each commit. Install with `cp hooks/pre-commit .git/hooks/`. |
 
 See **[STATUS.md](STATUS.md)** for current state and next steps (a handoff briefing).
 
@@ -63,6 +65,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\SetNet-Install.ps1 -Action Uninst
 - Installs to: `C:\Program Files\IPChanger`
 - Shortcuts: Public Desktop and All-Users Start Menu, named **Network Configuration Tool** (using the exe's embedded icon)
 - Logs: `C:\ProgramData\IPChanger\Logs`
+
+## Versioning
+
+The version lives in `VERSION` (e.g. `4.0.2`). The git `pre-commit` hook bumps the patch
+number on every commit, `build.ps1` stamps it into the exe, and the app displays it in the
+bottom-right corner of the window — so you can always confirm which build you're running.
+On a fresh clone, install the hook once: `cp hooks/pre-commit .git/hooks/pre-commit`.
 
 ## License
 

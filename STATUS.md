@@ -1,6 +1,6 @@
 # Status — where things stand
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-05-27_
 
 Snapshot of the IPChanger 4.0 work so anyone (or future me) can pick up cold.
 For what the app is and how to build/install it, see [README.md](README.md).
@@ -15,16 +15,26 @@ For what the app is and how to build/install it, see [README.md](README.md).
   public Desktop + All-Users Start Menu shortcuts; logs to `C:\ProgramData\IPChanger\Logs`.
 - **Scaffolding:** `build.ps1` (ps2exe + Authenticode signing), `README.md`,
   `.gitignore`, `resumeVibing.ps1` (post-reboot orientation + session resume), `LICENSE` (MIT).
-- **Built & named:** ps2exe compiles `Set-NetworkConfig.ps1` → **`IPChanger.exe`** (v4.0.1.0,
-  unsigned). Exe metadata is `Biggoan1` (no employer branding).
+- **Naming/metadata:** ps2exe compiles `Set-NetworkConfig.ps1` → **`IPChanger.exe`**;
+  metadata/copyright is `Biggoan1` (no employer branding); gear/plug icon embedded.
+- **Apply fix:** static apply now disables DHCP first (fixes the PolicyStore/Dhcp error).
+- **Gateway auto-fill:** gateway = network + 1 (e.g. `x.x.x.1` for /24) as IP/CIDR change.
+- **Versioning:** `VERSION` file is the single source; pre-commit hook auto-bumps the patch;
+  `build.ps1` stamps it; the app shows it bottom-right so you can confirm the running build.
 - **Pushed** to GitHub (`origin/main`).
+
+## Build / deploy workflow
+
+The build is **not** run on the dev machine. To ship: copy the source to USB, then in prod
+run `.\build.ps1 -Sign` — that compiles `IPChanger.exe` (reading `VERSION`) and signs it with
+the code-signing cert. Then `.\SetNet-Install.ps1 -Action Install` deploys it to
+`C:\Program Files\IPChanger`. Confirm the version shown on the form matches `VERSION`.
 
 ## Pending / next steps
 
-1. **TEST the installer:** `.\SetNet-Install.ps1 -Action Install` → confirm it lands in
-   `C:\Program Files\IPChanger` with Desktop + Start Menu shortcuts; then `-Action Uninstall`.
-2. **SIGN at the prod move:** `.\build.ps1 -Sign` (or sign the moved exe) with the
-   code-signing cert. The exe is currently **unsigned**.
+1. **TEST** with a freshly built exe (verify the version label changed) on a real adapter:
+   static Apply, Enable DHCP, and the gateway auto-fill.
+2. **SIGN + install** at the prod move per the workflow above.
 
 ## Open considerations (not yet decided)
 

@@ -1,0 +1,2 @@
+# The pre-commit hook is a POSIX sh script and must stay LF so sh can run it.
+hooks/pre-commit text eol=lf

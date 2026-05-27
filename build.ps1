@@ -30,7 +30,7 @@ param(
     [string]$OutputExe,
     [string]$Installer,
     [string]$IconFile,
-    [string]$Version       = '4.0.1.0',
+    [string]$Version,
     [switch]$Sign,
     [string]$CertThumbprint,
     [string]$TimestampUrl  = 'http://timestamp.digicert.com'
@@ -44,6 +44,15 @@ if (-not $Source)    { $Source    = Join-Path $root 'Set-NetworkConfig.ps1' }
 if (-not $OutputExe) { $OutputExe = Join-Path $root 'IPChanger.exe' }
 if (-not $Installer) { $Installer = Join-Path $root 'SetNet-Install.ps1' }
 if (-not $IconFile)  { $IconFile  = Join-Path $root 'IPChanger.ico' }
+
+# Version: single source of truth is the VERSION file (auto-bumped by the pre-commit hook).
+if (-not $Version) {
+    $verFile = Join-Path $root 'VERSION'
+    $Version = if (Test-Path $verFile) { (Get-Content $verFile -Raw).Trim() } else { '4.0.0' }
+}
+# ps2exe expects a 4-part version (x.x.x.x); pad if VERSION is shorter.
+$vparts = @($Version.Split('.')); while ($vparts.Count -lt 4) { $vparts += '0' }
+$Version = ($vparts[0..3] -join '.')
 
 # ---- Ensure ps2exe is available -------------------------------------------
 if (-not (Get-Module -ListAvailable -Name ps2exe)) {

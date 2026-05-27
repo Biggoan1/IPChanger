@@ -317,6 +317,22 @@ function New-IPOctetGroup {
     return $controls
 }
 
+# Resolve the app version to show on the form. Compiled exe -> its embedded FileVersion
+# (what was built/signed in prod); running as a .ps1 -> the VERSION file next to the script.
+function Get-AppVersion {
+    try {
+        $proc = [System.Diagnostics.Process]::GetCurrentProcess()
+        if ($proc.ProcessName -notin @('powershell', 'pwsh', 'powershell_ise')) {
+            $fv = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.MainModule.FileName).FileVersion
+            if ($fv) { return $fv }
+        }
+    }
+    catch { }
+    $vf = Join-Path $PSScriptRoot 'VERSION'
+    if (Test-Path $vf) { return (Get-Content $vf -Raw).Trim() }
+    return 'dev'
+}
+
 # Auto-fill the default gateway from the entered IP + CIDR: gateway = network address + 1
 # (e.g. 10.100.1.25 /24 -> 10.100.1.1). Suppressed while an adapter's real config is being read.
 $script:suppressGatewayAutofill = $false
@@ -685,6 +701,16 @@ $buttonCancel.Add_Click({
     $form.Close()
 })
 $form.Controls.Add($buttonCancel)
+
+# Version label (bottom-right corner) - lets you confirm which build you're running
+$labelVersion = New-Object System.Windows.Forms.Label
+$labelVersion.Text = "v$(Get-AppVersion)"
+$labelVersion.Size = New-Object System.Drawing.Size(150, 15)
+$labelVersion.Location = New-Object System.Drawing.Point(215, 360)
+$labelVersion.TextAlign = "MiddleRight"
+$labelVersion.ForeColor = [System.Drawing.Color]::Gray
+$labelVersion.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$form.Controls.Add($labelVersion)
 
 # Function to populate form fields from adapter configuration
 function Update-FormFromAdapter {

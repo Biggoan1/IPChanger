@@ -1,0 +1,21 @@
+#!/bin/sh
+# Auto-increment the patch component of VERSION on each commit, then re-stage it.
+# Install on a fresh clone:  cp hooks/pre-commit .git/hooks/pre-commit  (chmod +x on Unix)
+ver_file="VERSION"
+[ -f "$ver_file" ] || exit 0
+
+v=$(tr -d '[:space:]' < "$ver_file")
+case "$v" in
+  *.*.*) ;;          # expect major.minor.patch
+  *) exit 0 ;;       # leave anything unexpected alone
+esac
+
+major=${v%%.*}
+rest=${v#*.}
+minor=${rest%%.*}
+patch=${rest#*.}
+patch=${patch%%.*}   # drop any 4th component
+patch=$((patch + 1))
+
+printf '%s.%s.%s\n' "$major" "$minor" "$patch" > "$ver_file"
+git add "$ver_file"
