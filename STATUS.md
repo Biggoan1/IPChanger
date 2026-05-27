@@ -17,7 +17,10 @@ For what the app is and how to build/install it, see [README.md](README.md).
   `.gitignore`, `resumeVibing.ps1` (post-reboot orientation + session resume), `LICENSE` (MIT).
 - **Naming/metadata:** ps2exe compiles `Set-NetworkConfig.ps1` → **`IPChanger.exe`**;
   metadata/copyright is `Biggoan1` (no employer branding); gear/plug icon embedded.
-- **Apply fix:** static apply now disables DHCP first (fixes the PolicyStore/Dhcp error).
+- **Apply (verified working):** static apply uses `netsh ... source=static`, which disables
+  DHCP and assigns the address atomically. This fixed the "Inconsistent parameters PolicyStore
+  PersistentStore and Dhcp Enabled" error that `New-NetIPAddress` threw even after disabling
+  DHCP. **Do not** revert this to `New-NetIPAddress`.
 - **Gateway auto-fill:** gateway = network + 1 (e.g. `x.x.x.1` for /24) as IP/CIDR change.
 - **Versioning:** `VERSION` file is the single source; pre-commit hook auto-bumps the patch;
   `build.ps1` stamps it; the app shows it bottom-right so you can confirm the running build.
@@ -32,9 +35,9 @@ the code-signing cert. Then `.\SetNet-Install.ps1 -Action Install` deploys it to
 
 ## Pending / next steps
 
-1. **TEST** with a freshly built exe (verify the version label changed) on a real adapter:
-   static Apply, Enable DHCP, and the gateway auto-fill.
-2. **SIGN + install** at the prod move per the workflow above.
+1. ~~Static Apply + gateway auto-fill~~ — verified working (v4.0.3).
+2. Quick confirm of the **Enable DHCP** button on a real adapter (still on the original cmdlets).
+3. **SIGN + install** at the prod move per the workflow above.
 
 ## Open considerations (not yet decided)
 
