@@ -1,0 +1,35 @@
+@{
+    # ==========================================================================
+    #  TechIP - JEA session configuration.
+    #  Registered as a PSSessionConfiguration named "TechIP". A technician connects
+    #  with:  Invoke-Command -ComputerName localhost -ConfigurationName TechIP { ... }
+    # ==========================================================================
+    SchemaVersion       = '2.0.0.0'
+    GUID                = 'e2d8b6f1-4a30-4c9d-b1e7-5f3a2c8d6b04'
+    Author              = 'FAFO Lab / Network Operations'
+    Description         = 'Constrained endpoint that lets NetOps technicians change a NIC IPv4 and nothing else.'
+
+    # RestrictedRemoteServer => NoLanguage, no providers, and only the whitelisted
+    # commands from the role capability are visible. This is the jail.
+    SessionType         = 'RestrictedRemoteServer'
+
+    # Commands run as an EPHEMERAL virtual account created per session and destroyed
+    # when it ends - never a standing privileged account, never SYSTEM. The VA is a
+    # member of ONLY Network Configuration Operators, so it can change an IP and can
+    # do nothing an NCO member cannot.
+    RunAsVirtualAccount = $true
+    RunAsVirtualAccountGroups = @('Network Configuration Operators')
+
+    # Every session is transcribed here (who / what / when) for audit.
+    TranscriptDirectory = 'C:\ProgramData\IPChanger\JEA-Transcripts'
+
+    # Map the technician AD group to the role capability. Membership in NetOps is the
+    # gate; the .psrc is the whitelist they receive.
+    RoleDefinitions     = @{
+        'FAFOLAB\NetOps' = @{ RoleCapabilities = 'TechIP' }
+    }
+
+    # Defensive: even though RestrictedRemoteServer already blocks these.
+    LanguageMode        = 'NoLanguage'
+    ExecutionPolicy     = 'Restricted'
+}

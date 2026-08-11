@@ -1,0 +1,149 @@
+@{
+    # ==========================================================================
+    #  TechIP - JEA role capability for non-admin field technicians.
+    #
+    #  This is the "whitelist": a connecting user (a member of the AD group mapped
+    #  in TechIP.pssc) may ONLY call the three functions named in VisibleFunctions,
+    #  and nothing else - no cmdlets, no language, no providers. The functions
+    #  themselves are defined here (FunctionDefinitions) and run in FULL language
+    #  as the session's RunAs identity, which the .pssc pins to a virtual account
+    #  that is a member of Network Configuration Operators (NCO) and nothing more.
+    #
+    #  Why netsh and .NET (not Get-NetIPAddress / New-NetIPAddress):
+    #  an NCO member is denied ALL CIM/WMI ("Access denied"), so the NetTCPIP
+    #  cmdlets fail. netsh address operations and .NET NetworkInformation both work
+    #  under NCO over a non-interactive logon - which a WinRM session is.
+    #  (Findings: /srv/brain/wiki/ipchanger-nco.md)
+    # ==========================================================================
+
+    GUID              = 'b3f4a1c2-9d7e-4a55-8c1b-2f6e5a0d7e11'
+    Author            = 'FAFO Lab / Network Operations'
+    Description       = 'Lets a non-admin technician set/reset a chosen adapter''s IPv4 for programming field gear, with nothing else exposed.'
+    CompanyName       = 'FAFO Lab'
+
+    # The ONLY things a connected technician can run.
+    VisibleFunctions  = 'Get-NetworkAdapter', 'Set-TechnicianIP', 'Reset-TechnicianIP'
+
+    FunctionDefinitions = @(
+        @{
+            Name        = 'Get-NetworkAdapter'
+            ScriptBlock = {
+                # Enumerate wired adapters via .NET (CIM is denied to NCO). Reports the
+                # current IPv4 addresses and, for each, whether it is DHCP or Manual so a
+                # tech can see what they are about to change.
+                [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+                    Where-Object { $_.NetworkInterfaceType -eq 'Ethernet' } |
+                    ForEach-Object {
+                        $props = $_.GetIPProperties()
+                        $v4 = $props.UnicastAddresses |
+                            Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' } |
+                            ForEach-Object { '{0}/{1} [{2}]' -f $_.Address, $_.PrefixLength, $_.PrefixOrigin }
+                        [pscustomobject]@{
+                            Name      = $_.Name
+                            Status    = $_.OperationalStatus
+                            Speed     = if ($_.Speed -gt 0) { '{0} Mbps' -f ($_.Speed / 1MB) } else { 'n/a' }
+                            IPv4      = @($v4)
+                            MAC       = $_.GetPhysicalAddress().ToString()
+                        }
+                    }
+            }
+        },
+        @{
+            Name        = 'Set-TechnicianIP'
+            ScriptBlock = {
+                param(
+                    [Parameter(Mandatory)] [string]$Adapter,
+                    [Parameter(Mandatory)]
+                    [ValidatePattern('^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$')]
+                    [string]$IPAddress,
+                    [Parameter(Mandatory)] [ValidateRange(0,32)] [int]$PrefixLength,
+                    [ValidatePattern('^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$')]
+                    [string]$Gateway
+                )
+                # --- Adapter must EXACTLY match a real wired adapter. This is the
+                #     injection guard: only names that .NET actually reports can pass,
+                #     so nothing hostile ever reaches the netsh command line. ---
+                # foreach STATEMENT (not the Select-Object cmdlet): a RestrictedRemoteServer
+                # exposes Select-Object only through a proxy that strips -ExpandProperty, so
+                # the pipeline form returns nothing inside this endpoint. Language statements
+                # are unaffected.
+                $known = @()
+                foreach ($ni in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+                    if ($ni.NetworkInterfaceType -eq 'Ethernet') { $known += $ni.Name }
+                }
+                if ($Adapter -notin $known) {
+                    throw "Unknown adapter '$Adapter'. Valid: $($known -join ', ')"
+                }
+
+                # prefix length -> dotted mask, byte by byte. Deliberately NOT a
+                # [uint32] bit-shift: PowerShell widens uint32 shifts to Int64 and mangles
+                # the sign, which produced a /0 mask here (the same trap noted in
+                # ipchanger-nco.md for Test-SameSubnet). Integer byte math is exact.
+                $maskBytes = @(0,0,0,0)
+                $bits = $PrefixLength
+                for ($i = 0; $i -lt 4; $i++) {
+                    if ($bits -ge 8) { $maskBytes[$i] = 255; $bits -= 8 }
+                    elseif ($bits -gt 0) { $maskBytes[$i] = 256 - [math]::Pow(2, 8 - $bits); $bits = 0 }
+                    else { $maskBytes[$i] = 0 }
+                }
+                $mask = $maskBytes -join '.'
+
+                # Clear any previous MANUAL address first so a re-apply replaces rather
+                # than stacks. DHCP-origin addresses are left alone (additive-by-design
+                # under NCO: corporate connectivity is preserved).
+                $existing = ([System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+                    Where-Object Name -eq $Adapter).GetIPProperties().UnicastAddresses |
+                    Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' -and $_.PrefixOrigin -eq 'Manual' }
+                foreach ($e in $existing) {
+                    & netsh interface ipv4 delete address name="$Adapter" address=$($e.Address) 2>&1 | Out-Null
+                }
+
+                $args = @('interface','ipv4','set','address',"name=$Adapter",'source=static',"address=$IPAddress","mask=$mask")
+                if ($Gateway) { $args += @("gateway=$Gateway",'gwmetric=1') }
+                $out = & netsh @args 2>&1
+                $code = $LASTEXITCODE
+                [pscustomobject]@{
+                    Action  = 'Set'
+                    Adapter = $Adapter
+                    IPv4    = "$IPAddress/$PrefixLength"
+                    Gateway = if ($Gateway) { $Gateway } else { '(none)' }
+                    ExitCode = $code
+                    Success = ($code -eq 0)
+                    Output  = ($out | Out-String).Trim()
+                }
+            }
+        },
+        @{
+            Name        = 'Reset-TechnicianIP'
+            ScriptBlock = {
+                param( [Parameter(Mandatory)] [string]$Adapter )
+                $known = @()
+                foreach ($ni in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+                    if ($ni.NetworkInterfaceType -eq 'Ethernet') { $known += $ni.Name }
+                }
+                if ($Adapter -notin $known) { throw "Unknown adapter '$Adapter'. Valid: $($known -join ', ')" }
+
+                # Delete every MANUAL IPv4 address (leave DHCP alone) - the correct revert
+                # under NCO, since 'source=dhcp' just says "DHCP already enabled".
+                $manual = ([System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+                    Where-Object Name -eq $Adapter).GetIPProperties().UnicastAddresses |
+                    Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' -and $_.PrefixOrigin -eq 'Manual' }
+                $removed = @()
+                foreach ($m in $manual) {
+                    & netsh interface ipv4 delete address name="$Adapter" address=$($m.Address) 2>&1 | Out-Null
+                    $removed += "$($m.Address)"
+                }
+                # Best-effort: drop any default route left behind on this interface
+                # (a manual gateway leaves one). Parse netsh; delete matching.
+                & netsh interface ipv4 delete route prefix=0.0.0.0/0 interface="$Adapter" 2>&1 | Out-Null
+
+                [pscustomobject]@{
+                    Action  = 'Reset'
+                    Adapter = $Adapter
+                    Removed = @($removed)
+                    Success = $true
+                }
+            }
+        }
+    )
+}

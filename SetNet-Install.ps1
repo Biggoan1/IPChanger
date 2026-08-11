@@ -18,7 +18,11 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('Install', 'Uninstall')]
-    [string]$Action
+    [string]$Action,
+
+    # Skip the JEA endpoint (TechIP) registration and only lay down the app exe.
+    # The exe install NEVER depends on JEA succeeding - see the try/catch below.
+    [switch]$SkipJEA
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +45,30 @@ $LogDir  = Join-Path $env:ProgramData "$AppName\Logs"
 $LogFile = ($MyInvocation.MyCommand.Name -replace '\.ps1$', '.log')
 if (-not (Test-Path $LogDir)) { New-Item -Path $LogDir -ItemType Directory -Force | Out-Null }
 Start-Transcript -Path (Join-Path $LogDir $LogFile) -Append
+
+
+# ---- JEA endpoint (TechIP) -------------------------------------------------
+# The privileged IP-change path. Registering it lets a non-admin NetOps technician
+# change a NIC IP through a constrained WinRM endpoint whose commands run as an
+# ephemeral virtual account in Network Configuration Operators - no local admin, no
+# UAC, fully transcribed. Requires WinRM enabled with an auth method, and the
+# "Disallow WinRM from storing RunAs credentials" policy (DisableRunAs) NOT set.
+function Invoke-JeaRegistration {
+    param([ValidateSet('Register','Unregister')][string]$JeaAction)
+    $registrar = Join-Path $PSScriptRoot 'jea\Register-TechIPEndpoint.ps1'
+    if (-not (Test-Path $registrar)) {
+        Write-Warning "JEA registrar not found next to installer ($registrar) - skipping the TechIP endpoint."
+        return
+    }
+    try {
+        & $registrar -Action $JeaAction -SourceRoot (Join-Path $PSScriptRoot 'jea')
+    } catch {
+        # Never fail the app install/uninstall because of JEA. Common causes: WinRM
+        # disabled, no permitted auth method, or DisableRunAs=1. Log and move on.
+        Write-Warning "JEA $JeaAction did not complete: $($_.Exception.Message)"
+        Write-Warning "The app is still installed; the endpoint can be registered later once WinRM is ready."
+    }
+}
 
 function New-AppShortcut {
     param(
@@ -115,11 +143,15 @@ try {
             New-AppShortcut -Path $DesktopShortcut   -Target $TargetExe -WorkingDir $InstallDir -Icon $IconLocation
             New-AppShortcut -Path $StartMenuShortcut -Target $TargetExe -WorkingDir $InstallDir -Icon $IconLocation
 
+            if (-not $SkipJEA) { Invoke-JeaRegistration -JeaAction Register } else { Write-Host 'JEA registration skipped (-SkipJEA)' }
+
             Write-Host 'Install Complete'
         }
 
         'Uninstall' {
             Write-Host 'Action=Uninstall'
+
+            if (-not $SkipJEA) { Invoke-JeaRegistration -JeaAction Unregister }
 
             # Also clear any leftovers from older versions.
             Remove-LegacyArtifacts
