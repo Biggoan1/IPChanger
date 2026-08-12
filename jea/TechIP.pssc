@@ -23,10 +23,14 @@
     # Every session is transcribed here (who / what / when) for audit.
     TranscriptDirectory = 'C:\ProgramData\IPChanger\JEA-Transcripts'
 
-    # Map the technician AD group to the role capability. Membership in NetOps is the
-    # gate; the .psrc is the whitelist they receive.
+    # Who may reach the endpoint. NO special group is required (John's call): the
+    # RestrictedRemoteServer whitelist + the NCO-only virtual account ARE the security
+    # boundary, so gating by group membership added admin overhead without real benefit -
+    # the worst any caller can do is change their own machine's NIC IP, which is the
+    # intended capability, and every call is transcribed. Narrow to e.g.
+    # 'FAFOLAB\Domain Users' if you later want a floor.
     RoleDefinitions     = @{
-        'FAFOLAB\NetOps' = @{ RoleCapabilities = 'TechIP' }
+        'NT AUTHORITY\Authenticated Users' = @{ RoleCapabilities = 'TechIP' }
     }
 
     # Defensive: even though RestrictedRemoteServer already blocks these.

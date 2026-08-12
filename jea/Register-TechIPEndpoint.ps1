@@ -67,8 +67,8 @@ if ($Action -eq 'Register') {
 
     $cfg = Get-PSSessionConfiguration -Name $EndpointName
     Write-Host "  RunAsVirtualAccount=$($cfg.RunAsVirtualAccount)  Permission=$($cfg.Permission)"
-    Write-Host "Done. Technicians (NetOps) connect with:"
-    Write-Host "  Invoke-Command -ComputerName localhost -ConfigurationName $EndpointName -Credential <xID> -ScriptBlock { Get-NetworkAdapter }"
+    Write-Host "Done. Any signed-in user connects (no credential needed):"
+    Write-Host "  Invoke-Command -ComputerName localhost -ConfigurationName $EndpointName -ScriptBlock { Get-NetworkAdapter }"
 }
 else {
     Write-Host "Unregistering JEA endpoint '$EndpointName'..."

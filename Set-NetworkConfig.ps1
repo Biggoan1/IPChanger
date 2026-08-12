@@ -4,26 +4,43 @@
 .SYNOPSIS
     Network Configuration GUI Tool
 .DESCRIPTION
-    Allows users in the Network Configuration Operators group to change IP settings
-    when run with elevation.
+    Lets a technician change a wired adapter's IPv4 settings. Launched as a
+    non-admin it connects to the local TechIP JEA endpoint (see jea/) and every
+    change runs as the endpoint's constrained virtual account - no elevation,
+    no local admin. Launched elevated (or where TechIP is not deployed) it
+    falls back to the original direct/UAC path.
 .NOTES
     Author: Network Operations
-    Requires: Network Configuration Operators group membership and elevation
+    Requires: TechIP endpoint + membership in its mapped group (technician mode),
+    or Network Configuration Operators membership and elevation (admin mode)
 #>
 
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
 # ---------------------------------------------------------------------------
-# Self-elevation
+# Privilege model: TechIP JEA endpoint first, UAC elevation as the fallback
 # ---------------------------------------------------------------------------
-# Changing IP settings requires elevation. When this app is launched without
-# administrative rights it relaunches itself through UAC and exits the original
-# (non-elevated) instance. This replaces the old separate Launch-NetworkConfig
-# launcher and works both as a .ps1 (during testing) and as the ps2exe .exe.
+# A non-admin technician cannot elevate (and UAC filters Network Configuration
+# Operators out of interactive tokens anyway - see the repo's jea/ folder), so
+# when launched without admin rights the app connects to the local constrained
+# TechIP JEA endpoint AS THE SIGNED-IN USER (integrated auth, no credential
+# prompt): the technician's own account is a member of the endpoint's mapped
+# group (NetOps), so the endpoint authorises them and only the whitelisted
+# Set/Reset functions run, as a virtual account that is a member of NCO and
+# nothing more. On a box where the endpoint is not deployed, the old behaviour
+# remains available: relaunch elevated through UAC.
+$script:Mode          = 'Admin'   # 'Admin' = elevated, direct writes; 'JEA' = via TechIP
+$script:TechIPSession = $null
+
 $currentIdentity  = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object System.Security.Principal.WindowsPrincipal($currentIdentity)
+$isAdmin = $currentPrincipal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if (-not $currentPrincipal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
+function Start-ElevatedRelaunch {
+    # The pre-JEA path: relaunch this app through UAC and exit this instance.
+    # Works both as a .ps1 (host is powershell) and as the ps2exe .exe (host is the app).
     $thisProcess = [System.Diagnostics.Process]::GetCurrentProcess()
-    # Run as a script -> host is powershell/pwsh; compiled -> host is the app exe itself.
     $runningAsScript = $thisProcess.ProcessName -in @('powershell', 'pwsh', 'powershell_ise')
     try {
         if ($runningAsScript) {
@@ -42,8 +59,42 @@ if (-not $currentPrincipal.IsInRole([System.Security.Principal.WindowsBuiltInRol
     exit
 }
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+if (-not $isAdmin) {
+    # Connect as the SIGNED-IN user - no credential prompt. The technician runs this
+    # with their normal ID; WinRM authenticates them with their existing Kerberos/Negotiate
+    # token and the TechIP endpoint authorises any authenticated user (no special group
+    # required). The whitelisted calls then run as the endpoint's NCO virtual account.
+    $jeaError = $null
+    try {
+        $script:TechIPSession = New-PSSession -ComputerName localhost -ConfigurationName TechIP -ErrorAction Stop
+        $script:Mode = 'JEA'
+    }
+    catch { $jeaError = $_.Exception.Message }
+    if ($script:Mode -ne 'JEA') {
+        $fallback = [System.Windows.Forms.MessageBox]::Show(
+            "Could not connect to the TechIP endpoint:`n`n$jeaError`n`nRetry with administrator elevation instead?",
+            'TechIP unavailable',
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($fallback -eq [System.Windows.Forms.DialogResult]::Yes) { Start-ElevatedRelaunch }
+        exit
+    }
+}
+
+# Every technician-mode change goes through this: one whitelisted function call
+# over the session opened above. The endpoint is NoLanguage, so arguments are
+# passed positionally and bound (and re-validated) by the server-side function.
+function Invoke-TechIPCommand {
+    param(
+        [Parameter(Mandatory)] [scriptblock]$ScriptBlock,
+        [object[]]$Arguments
+    )
+    if (-not $script:TechIPSession -or $script:TechIPSession.State -ne 'Opened') {
+        throw 'The TechIP session is no longer connected. Close and reopen the app.'
+    }
+    Invoke-Command -Session $script:TechIPSession -ScriptBlock $ScriptBlock -ArgumentList $Arguments
+}
 
 # Function to validate IP address format
 function Test-IPAddress {
@@ -149,21 +200,62 @@ function ConvertTo-SubnetMask {
     return $octets
 }
 
-# Function to check if adapter is using DHCP
+# ---------------------------------------------------------------------------
+# Adapter READS - .NET NetworkInformation, never Get-Net*/CIM.
+# On the hardened image CIM/WMI is denied to non-admins (so the NetTCPIP
+# cmdlets fail in technician mode), while System.Net.NetworkInformation works
+# for any user. The same read path is used in both modes so there is exactly
+# one implementation to trust.
+# ---------------------------------------------------------------------------
+function Get-WiredAdapter {
+    # Same audience as the old Get-NetAdapter filter: wired physical adapters,
+    # excluding Wi-Fi/WWAN (not NetworkInterfaceType Ethernet) and virtual switches.
+    [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+        Where-Object {
+            $_.NetworkInterfaceType -eq 'Ethernet' -and
+            $_.Description -notmatch 'vEthernet|Hyper-V|Virtual|VMware|VirtualBox|TAP-Windows' -and
+            $_.Name -notmatch 'vEthernet|VMware'
+        }
+}
+
+function Get-AdapterIPv4Info {
+    param([string]$AdapterName)
+
+    $ni = Get-WiredAdapter | Where-Object { $_.Name -eq $AdapterName }
+    if (-not $ni) { return $null }
+
+    $props = $ni.GetIPProperties()
+    $v4 = @($props.UnicastAddresses | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' })
+
+    # Show the address a tech cares about: Manual (their static) over Dhcp over
+    # anything else (e.g. a 169.254 WellKnown autoconfig address).
+    $addr = $v4 | Where-Object { $_.PrefixOrigin -eq 'Manual' } | Select-Object -First 1
+    if (-not $addr) { $addr = $v4 | Where-Object { $_.PrefixOrigin -eq 'Dhcp' } | Select-Object -First 1 }
+    if (-not $addr) { $addr = $v4 | Select-Object -First 1 }
+
+    $gw  = $props.GatewayAddresses | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' } | Select-Object -First 1
+    $dns = @($props.DnsAddresses | Where-Object { $_.AddressFamily -eq 'InterNetwork' } | ForEach-Object { $_.ToString() })
+
+    [pscustomobject]@{
+        IPAddress    = if ($addr) { $addr.Address.ToString() } else { $null }
+        PrefixLength = if ($addr) { [int]$addr.PrefixLength } else { $null }
+        HasManual    = [bool]($v4 | Where-Object { $_.PrefixOrigin -eq 'Manual' })
+        IsDhcp       = [bool]($addr -and $addr.PrefixOrigin -eq 'Dhcp')
+        Gateway      = if ($gw) { $gw.Address.ToString() } else { $null }
+        DnsServers   = $dns
+    }
+}
+
+# Function to check if adapter is using DHCP (JEA mode: "no manual address left",
+# since technician changes are additive and reset just removes the manual IPs)
 function Test-AdapterDHCP {
     param([string]$AdapterName)
 
     try {
-        $adapter = Get-NetAdapter | Where-Object { $_.Name -eq $AdapterName }
-        if (-not $adapter) {
-            return $false
-        }
-
-        $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        if ($ipConfig) {
-            return $ipConfig.PrefixOrigin -eq "Dhcp"
-        }
-        return $true
+        $info = Get-AdapterIPv4Info -AdapterName $AdapterName
+        if (-not $info) { return $false }
+        if ($script:Mode -eq 'JEA') { return -not $info.HasManual }
+        return $info.IsDhcp
     }
     catch {
         return $false
@@ -173,6 +265,17 @@ function Test-AdapterDHCP {
 # Function to set adapter to DHCP
 function Set-AdapterToDHCP {
     param([string]$AdapterName)
+
+    # Technician mode: Reset-TechnicianIP removes every MANUAL IPv4 (and any
+    # leftover default route) via the endpoint; DHCP itself was never disabled
+    # under NCO, so removing the manual addresses IS the revert.
+    if ($script:Mode -eq 'JEA') {
+        $result = Invoke-TechIPCommand -ScriptBlock { param($a) Reset-TechnicianIP -Adapter $a } -Arguments @($AdapterName)
+        if (-not $result -or -not $result.Success) {
+            throw "The TechIP endpoint could not reset adapter '$AdapterName'."
+        }
+        return $true
+    }
 
     try {
         $adapter = Get-NetAdapter | Where-Object { $_.Name -eq $AdapterName }
@@ -208,6 +311,33 @@ function Set-NetworkConfiguration {
         [string]$PrimaryDNS,
         [string]$SecondaryDNS
     )
+
+    # Technician mode: the whole change is one whitelisted Set-TechnicianIP call.
+    # The endpoint re-validates everything (adapter against the live-enumerated
+    # set, IP/prefix format) and runs it as the NCO virtual account. DNS is not
+    # part of technician mode - NCO cannot set DNS servers, and the field techs
+    # don't need it (the DNS fields are disabled in the GUI for this mode).
+    if ($script:Mode -eq 'JEA') {
+        # NoLanguage endpoint: the remote scriptblock must be a single plain
+        # command - no if/else on the server side (rejected with "syntax is not
+        # supported by this runspace"). Branch here, send the matching call.
+        $prefix = ConvertTo-PrefixLength -SubnetMask $SubnetMask
+        if (Test-IPAddress $Gateway) {
+            $result = Invoke-TechIPCommand -ScriptBlock {
+                param($a, $ip, $p, $g) Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p -Gateway $g
+            } -Arguments @($AdapterName, $IPAddress, $prefix, $Gateway)
+        }
+        else {
+            $result = Invoke-TechIPCommand -ScriptBlock {
+                param($a, $ip, $p) Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p
+            } -Arguments @($AdapterName, $IPAddress, $prefix)
+        }
+        if (-not $result -or -not $result.Success) {
+            $detail = if ($result) { $result.Output } else { 'no result returned' }
+            throw "Could not set IP address: $detail"
+        }
+        return $true
+    }
 
     try {
         # Get the network adapter
@@ -367,8 +497,10 @@ function Update-GatewayFromNetwork {
     }
 }
 
-# Check group membership before showing GUI
-if (-not (Test-GroupMembership -GroupName "Network Configuration Operators")) {
+# Check group membership before showing GUI. Admin (elevated) mode only: in
+# technician mode the endpoint's own ACL (the NetOps role mapping in TechIP.pssc)
+# already decided who may connect - the session would not have opened otherwise.
+if ($script:Mode -eq 'Admin' -and -not (Test-GroupMembership -GroupName "Network Configuration Operators")) {
     [void][System.Windows.Forms.MessageBox]::Show(
         "You are not a member of the 'Network Configuration Operators' group.`n`nAccess denied.",
         "Authorization Required",
@@ -405,16 +537,9 @@ $comboAdapter.DropDownStyle = "DropDownList"
 $comboAdapter.FlatStyle = "Flat"
 $comboAdapter.TabIndex = $tabIndex++
 
-# Populate network adapters.
-# Show ALL physical adapters (connected or not); exclude Wi-Fi, WWAN/cellular, and
-# Hyper-V / VMware vEthernet switch adapters (explicit, on top of -Physical).
-Get-NetAdapter -Physical | Where-Object {
-    $_.PhysicalMediaType -ne "Native 802.11" -and          # exclude Wi-Fi
-    $_.PhysicalMediaType -ne "Wireless WAN" -and           # exclude WWAN / cellular
-    $_.InterfaceDescription -notmatch "Mobile Broadband|WWAN|Cellular" -and
-    $_.InterfaceDescription -notmatch "vEthernet|Hyper-V|Virtual|VMware|VirtualBox|TAP-Windows" -and
-    $_.Name -notmatch "vEthernet|VMware"
-} | Sort-Object Name | ForEach-Object {
+# Populate network adapters: all wired adapters (connected or not), Wi-Fi/WWAN/
+# virtual switches excluded - see Get-WiredAdapter (non-admin-safe .NET reads).
+Get-WiredAdapter | Sort-Object Name | ForEach-Object {
     $comboAdapter.Items.Add($_.Name) | Out-Null
 }
 
@@ -721,57 +846,49 @@ function Update-FormFromAdapter {
         # adapter's REAL gateway, which is set explicitly further down.
         $script:suppressGatewayAutofill = $true
         try {
-            $adapter = Get-NetAdapter | Where-Object { $_.Name -eq $comboAdapter.SelectedItem }
-            if ($adapter) {
-                # Get IP configuration
-                $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
-                $gateway = Get-NetRoute -InterfaceIndex $adapter.InterfaceIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
-                $dns = Get-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+            # Non-admin-safe .NET reads (works in both modes; DnsAddresses is
+            # IPv4-filtered there, which also drops the fec0:: site-local noise).
+            $info = Get-AdapterIPv4Info -AdapterName $comboAdapter.SelectedItem
+            if ($info -and $info.IPAddress) {
+                # Populate IP address octets
+                $ipParts = $info.IPAddress -split '\.'
+                $octetIndex = 0
+                foreach ($control in $ipOctets) {
+                    if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $ipParts.Count) {
+                        $control.Text = $ipParts[$octetIndex++]
+                    }
+                }
 
-                if ($ipConfig) {
-                    # Populate IP address octets
-                    $ipParts = $ipConfig.IPAddress -split '\.'
+                # Set CIDR
+                $textCidr.Text = $info.PrefixLength.ToString()
+
+                # Populate gateway
+                if ($info.Gateway) {
+                    $gwParts = $info.Gateway -split '\.'
                     $octetIndex = 0
-                    foreach ($control in $ipOctets) {
-                        if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $ipParts.Count) {
-                            $control.Text = $ipParts[$octetIndex++]
+                    foreach ($control in $gatewayOctets) {
+                        if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $gwParts.Count) {
+                            $control.Text = $gwParts[$octetIndex++]
                         }
                     }
+                }
 
-                    # Set CIDR
-                    $textCidr.Text = $ipConfig.PrefixLength.ToString()
-
-                    # Populate gateway
-                    if ($gateway) {
-                        $gwParts = $gateway.NextHop -split '\.'
-                        $octetIndex = 0
-                        foreach ($control in $gatewayOctets) {
-                            if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $gwParts.Count) {
-                                $control.Text = $gwParts[$octetIndex++]
-                            }
+                # Populate DNS
+                if ($info.DnsServers.Count -gt 0) {
+                    $dnsParts = $info.DnsServers[0] -split '\.'
+                    $octetIndex = 0
+                    foreach ($control in $dns1Octets) {
+                        if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $dnsParts.Count) {
+                            $control.Text = $dnsParts[$octetIndex++]
                         }
                     }
-
-                    # Populate DNS
-                    if ($dns.ServerAddresses) {
-                        if ($dns.ServerAddresses.Count -gt 0 -and $dns.ServerAddresses[0] -ne "fec0:0:0:ffff::1" -and $dns.ServerAddresses[0] -ne "fec0:0:0:ffff::2" -and $dns.ServerAddresses[0] -ne "fec0:0:0:ffff::3") {
-                            $dnsParts = $dns.ServerAddresses[0] -split '\.'
-                            $octetIndex = 0
-                            foreach ($control in $dns1Octets) {
-                                if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $dnsParts.Count) {
-                                    $control.Text = $dnsParts[$octetIndex++]
-                                }
-                            }
-                        }
-
-                        if ($dns.ServerAddresses.Count -gt 1 -and $dns.ServerAddresses[1] -ne "fec0:0:0:ffff::1" -and $dns.ServerAddresses[1] -ne "fec0:0:0:ffff::2" -and $dns.ServerAddresses[1] -ne "fec0:0:0:ffff::3") {
-                            $dnsParts = $dns.ServerAddresses[1] -split '\.'
-                            $octetIndex = 0
-                            foreach ($control in $dns2Octets) {
-                                if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $dnsParts.Count) {
-                                    $control.Text = $dnsParts[$octetIndex++]
-                                }
-                            }
+                }
+                if ($info.DnsServers.Count -gt 1) {
+                    $dnsParts = $info.DnsServers[1] -split '\.'
+                    $octetIndex = 0
+                    foreach ($control in $dns2Octets) {
+                        if ($control -is [System.Windows.Forms.TextBox] -and $octetIndex -lt $dnsParts.Count) {
+                            $control.Text = $dnsParts[$octetIndex++]
                         }
                     }
                 }
@@ -793,6 +910,9 @@ function Update-DHCPButtonState {
         $buttonDHCP.Enabled = -not $isDHCP
         if ($isDHCP) {
             $buttonDHCP.Text = "DHCP Active"
+        } elseif ($script:Mode -eq 'JEA') {
+            # Technician mode never disabled DHCP; the button removes the manual IPs.
+            $buttonDHCP.Text = "Reset to DHCP"
         } else {
             $buttonDHCP.Text = "Enable DHCP"
         }
@@ -802,6 +922,25 @@ function Update-DHCPButtonState {
 # Update DHCP button when adapter selection changes
 $comboAdapter.Add_SelectedIndexChanged({
     Update-DHCPButtonState
+})
+
+# Technician (JEA) mode adjustments: say so in the title bar, and grey out the
+# DNS fields - NCO cannot set DNS servers and the field techs don't need it.
+if ($script:Mode -eq 'JEA') {
+    $form.Text = "Network Configuration Tool - Technician mode"
+    foreach ($control in @($dns1Octets) + @($dns2Octets)) {
+        if ($control -is [System.Windows.Forms.TextBox]) { $control.Enabled = $false }
+    }
+    $labelDNS1.ForeColor = [System.Drawing.Color]::Gray
+    $labelDNS2.ForeColor = [System.Drawing.Color]::Gray
+}
+
+# Drop the TechIP session (and its virtual account) with the window.
+$form.Add_FormClosed({
+    if ($script:TechIPSession) {
+        Remove-PSSession -Session $script:TechIPSession -ErrorAction SilentlyContinue
+        $script:TechIPSession = $null
+    }
 })
 
 # Initial update of DHCP button state

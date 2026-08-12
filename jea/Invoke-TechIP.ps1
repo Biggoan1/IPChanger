@@ -11,8 +11,9 @@
 .EXAMPLE
     .\Invoke-TechIP.ps1 -Reset -Adapter 'Ethernet 2'
 .NOTES
-    Prompts for the technician's xID credential unless -Credential is supplied. Nothing
-    here runs elevated - the privilege lives entirely in the endpoint's virtual account.
+    Connects as the CURRENT signed-in user (integrated auth, no prompt); pass -Credential
+    only to use a different account. Nothing here runs elevated - the privilege lives
+    entirely in the endpoint's virtual account.
 #>
 [CmdletBinding(DefaultParameterSetName='List')]
 param(
@@ -34,21 +35,29 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-if (-not $Credential) {
-    $Credential = Get-Credential -Message "Enter your privileged (xID) credential for the $EndpointName endpoint" -UserName "$env:USERDOMAIN\"
-}
-$conn = @{ ComputerName = $ComputerName; ConfigurationName = $EndpointName; Credential = $Credential }
+# No credential prompt: connect as the CURRENT signed-in user (integrated auth). The
+# endpoint authorises any authenticated user directly. -Credential is still honoured if
+# supplied (e.g. testing as another account).
+$conn = @{ ComputerName = $ComputerName; ConfigurationName = $EndpointName }
+if ($Credential) { $conn.Credential = $Credential }
 
 switch ($PSCmdlet.ParameterSetName) {
     'List'  { Invoke-Command @conn -ScriptBlock { Get-NetworkAdapter } }
     'Set'   {
         # Pass args positionally; the endpoint is NoLanguage, so the values are bound by
-        # the server-side function's parameters (validated there).
-        Invoke-Command @conn -ScriptBlock {
-            param($a,$ip,$p,$g)
-            if ($g) { Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p -Gateway $g }
-            else    { Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p }
-        } -ArgumentList $Adapter, $IPAddress, $PrefixLength, $Gateway
+        # the server-side function's parameters (validated there). NoLanguage also means
+        # the remote scriptblock must be a single plain command - an if/else inside it is
+        # rejected with "syntax is not supported by this runspace" - so branch here.
+        if ($Gateway) {
+            Invoke-Command @conn -ScriptBlock {
+                param($a,$ip,$p,$g) Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p -Gateway $g
+            } -ArgumentList $Adapter, $IPAddress, $PrefixLength, $Gateway
+        }
+        else {
+            Invoke-Command @conn -ScriptBlock {
+                param($a,$ip,$p) Set-TechnicianIP -Adapter $a -IPAddress $ip -PrefixLength $p
+            } -ArgumentList $Adapter, $IPAddress, $PrefixLength
+        }
     }
     'Reset' { Invoke-Command @conn -ScriptBlock { param($a) Reset-TechnicianIP -Adapter $a } -ArgumentList $Adapter }
 }
