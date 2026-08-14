@@ -6,7 +6,7 @@
     # ==========================================================================
     SchemaVersion       = '2.0.0.0'
     GUID                = 'e2d8b6f1-4a30-4c9d-b1e7-5f3a2c8d6b04'
-    Author              = 'FAFO Lab / Network Operations'
+    Author              = 'Network Operations'
     Description         = 'Constrained endpoint that lets NetOps technicians change a NIC IPv4 and nothing else.'
 
     # RestrictedRemoteServer => NoLanguage, no providers, and only the whitelisted

@@ -17,9 +17,9 @@
     # ==========================================================================
 
     GUID              = 'b3f4a1c2-9d7e-4a55-8c1b-2f6e5a0d7e11'
-    Author            = 'FAFO Lab / Network Operations'
+    Author            = 'Network Operations'
     Description       = 'Lets a non-admin technician set/reset a chosen adapter''s IPv4 for programming field gear, with nothing else exposed.'
-    CompanyName       = 'FAFO Lab'
+    CompanyName       = ''
 
     # The ONLY things a connected technician can run.
     VisibleFunctions  = 'Get-NetworkAdapter', 'Set-TechnicianIP', 'Reset-TechnicianIP'
