@@ -28,7 +28,7 @@
     # boundary, so gating by group membership added admin overhead without real benefit -
     # the worst any caller can do is change their own machine's NIC IP, which is the
     # intended capability, and every call is transcribed. Narrow to e.g.
-    # 'FAFOLAB\Domain Users' if you later want a floor.
+    # 'YOURDOMAIN\Domain Users' if you later want a floor.
     RoleDefinitions     = @{
         'NT AUTHORITY\Authenticated Users' = @{ RoleCapabilities = 'TechIP' }
     }
