@@ -108,7 +108,14 @@ if ($Sign) {
     $cert = Get-SigningCert -Thumbprint $CertThumbprint
     Write-Host "Signing with: $($cert.Subject)  [$($cert.Thumbprint)]"
 
-    foreach ($file in @($OutputExe, $Installer)) {
+    # Sign the exe, the installer, AND every PowerShell file under jea\ (.ps1/.psd1/.psrc/.pssc):
+    # under an AllSigned execution policy the JEA module manifest and role capability file are
+    # checked exactly like scripts, and the endpoint loads them under the machine policy, not the
+    # installer's -ExecutionPolicy Bypass. (tools\Sign-ScriptWithCodeSigningCert.ps1 does the same
+    # thing standalone from PS 5.1 or PS 7.)
+    $jeaFiles = Get-ChildItem -Path (Join-Path $root 'jea') -Recurse -File -Include *.ps1,*.psd1,*.psrc,*.pssc -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName
+    foreach ($file in @($OutputExe, $Installer) + @($jeaFiles)) {
         if (-not (Test-Path $file)) { Write-Warning "Skipping signing (not found): $file"; continue }
         $result = Set-AuthenticodeSignature -FilePath $file -Certificate $cert `
                                             -TimestampServer $TimestampUrl -HashAlgorithm SHA256
