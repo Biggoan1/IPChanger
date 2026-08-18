@@ -108,12 +108,14 @@ if ($Sign) {
     $cert = Get-SigningCert -Thumbprint $CertThumbprint
     Write-Host "Signing with: $($cert.Subject)  [$($cert.Thumbprint)]"
 
-    # Sign the exe, the installer, AND every PowerShell file under jea\ (.ps1/.psd1/.psrc/.pssc):
-    # under an AllSigned execution policy the JEA module manifest and role capability file are
-    # checked exactly like scripts, and the endpoint loads them under the machine policy, not the
-    # installer's -ExecutionPolicy Bypass. (tools\Sign-ScriptWithCodeSigningCert.ps1 does the same
-    # thing standalone from PS 5.1 or PS 7.)
-    $jeaFiles = Get-ChildItem -Path (Join-Path $root 'jea') -Recurse -File -Include *.ps1,*.psd1,*.psrc,*.pssc -ErrorAction SilentlyContinue |
+    # Sign the exe, the installer, AND the signable files under jea\ (.ps1 + the .psd1 manifest):
+    # under an AllSigned execution policy the module manifest is checked like a script, and the
+    # endpoint loads it under the machine policy, not the installer's -ExecutionPolicy Bypass.
+    # NOT .pssc / .psrc: those are data files with no Authenticode SIP handler - signing them fails
+    # with "The form specified for the subject is not one supported or known by the specified trust
+    # provider" (verified 2026-08-18) - and execution policy never applies to them, so nothing is lost.
+    # (tools\Sign-ScriptWithCodeSigningCert.ps1 does the same thing standalone from PS 5.1 or PS 7.)
+    $jeaFiles = Get-ChildItem -Path (Join-Path $root 'jea') -Recurse -File -Include *.ps1,*.psm1,*.psd1 -ErrorAction SilentlyContinue |
                 Select-Object -ExpandProperty FullName
     foreach ($file in @($OutputExe, $Installer) + @($jeaFiles)) {
         if (-not (Test-Path $file)) { Write-Warning "Skipping signing (not found): $file"; continue }

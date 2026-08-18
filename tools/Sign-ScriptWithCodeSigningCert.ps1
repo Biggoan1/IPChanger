@@ -6,8 +6,12 @@ function Sign-ScriptWithCodeSigningCert {
     Dot-source this file, then call the function. Used by build.ps1 -Sign for the jea\ tree.
 .EXAMPLE
     Sign-ScriptWithCodeSigningCert .\SetNet-Install.ps1
-    Sign-ScriptWithCodeSigningCert .\jea -Recurse           # .ps1/.psd1/.psrc/.pssc under jea\
-    Get-ChildItem .\jea -Recurse -Include *.psrc,*.pssc | Sign-ScriptWithCodeSigningCert
+    Sign-ScriptWithCodeSigningCert .\jea -Recurse           # .ps1/.psm1/.psd1 under jea\
+    Get-ChildItem .\jea -Recurse -Include *.psd1 | Sign-ScriptWithCodeSigningCert
+.NOTES
+    .pssc / .psrc (JEA session config / role capability) are NOT signable - Windows has no
+    Authenticode SIP for them ("The form specified for the subject is not one supported...") and
+    execution policy does not apply to them, so they are excluded from the default -Include.
     Sign-ScriptWithCodeSigningCert .\IPChanger.exe -CertThumbprint AABBCC...
 #>
     [CmdletBinding()]
@@ -18,7 +22,7 @@ function Sign-ScriptWithCodeSigningCert {
         [switch]$Recurse,
         [string]$CertThumbprint,
         [string]$TimestampServer = 'http://timestamp.digicert.com',
-        [string[]]$Include = @('*.ps1','*.psm1','*.psd1','*.ps1xml','*.psrc','*.pssc','*.exe','*.dll','*.msi')
+        [string[]]$Include = @('*.ps1','*.psm1','*.psd1','*.ps1xml','*.cdxml','*.exe','*.dll','*.msi')
     )
     begin {
         if (-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core') { throw 'Authenticode signing is Windows-only.' }

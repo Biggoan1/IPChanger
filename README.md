@@ -29,7 +29,7 @@ physical network adapter, or switch the adapter back to DHCP.
 | `Set-NetworkConfig.ps1` | The app: self-elevation + the WinForms GUI and all network logic. |
 | `SetNet-Install.ps1` | Install/uninstall script. Copies the exe to `C:\Program Files\IPChanger` and creates Desktop + Start Menu shortcuts. |
 | `build.ps1` | Compiles `Set-NetworkConfig.ps1` to an exe with ps2exe, embeds the icon, and (optionally) signs the exe + installer. |
-| `tools\Sign-ScriptWithCodeSigningCert.ps1` | Standalone signer (PS 5.1 + PS 7): dot-source, then `Sign-ScriptWithCodeSigningCert .\jea -Recurse` etc. Newest code-signing cert in `CurrentUser\My`, timestamped, SHA256. |
+| `tools\Sign-ScriptWithCodeSigningCert.ps1` | Standalone signer (PS 5.1 + PS 7): dot-source, then `Sign-ScriptWithCodeSigningCert .\jea -Recurse` etc. (`.pssc`/`.psrc` are data files - not signable, not policy-checked - and are skipped.) Newest code-signing cert in `CurrentUser\My`, timestamped, SHA256. |
 | `Make-Icon.ps1` | Generates `IPChanger.ico` (re-run to tweak the icon design). |
 | `IPChanger.ico` | App icon embedded into the exe; the installer's shortcuts inherit it. |
 | `VERSION` | Single source of truth for the app version (auto-bumped by the git pre-commit hook). |
@@ -45,7 +45,7 @@ See **[STATUS.md](STATUS.md)** for current state and next steps (a handoff brief
 # Compile only
 .\build.ps1
 
-# Compile and sign the exe + installer + every file under jea\ (uses newest code-signing cert in your store)
+# Compile and sign the exe + installer + the .ps1/.psd1 files under jea\ (uses newest code-signing cert in your store)
 .\build.ps1 -Sign
 
 # Sign with a specific certificate and set the version
